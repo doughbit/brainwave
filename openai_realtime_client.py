@@ -53,17 +53,31 @@ class OpenAIRealtimeAudioTextClient(RealtimeClientBase):
                 "audio": {
                     "input": {
                         "format": {"type": "audio/pcm", "rate": 24000},
-                        "transcription": {"model": "gpt-4o-transcribe"},
                         "turn_detection": None,
                     }
                 },
             }
 
             if session_mode == "transcription":
+                # Transcription-only mode genuinely needs an ASR model (there is no
+                # realtime conversation model producing text here), so keep it ONLY here.
+                session_config_payload["audio"]["input"]["transcription"] = {"model": "gpt-4o-transcribe"}
                 logger.info("Configuring session for transcription mode.")
             else:
+                # Conversation mode: intentionally NO input_audio_transcription.
+                #
+                # Upstream (grapeot/brainwave) also ran a *second* model here —
+                # gpt-4o-transcribe — to make a verbatim transcript alongside the realtime
+                # model. But that transcript was never shown or used anywhere: it was just
+                # written to the logs and thrown away. So every utterance paid for an extra
+                # paid model call to produce output nobody ever sees — money for nothing.
+                # (Looks like the original author's "always keep a copy of everything"
+                # programmer reflex. We don't need it.)
+                #
+                # gpt-realtime-mini already hears the audio directly and returns the
+                # polished text, so ONE model is enough. The redundant ASR pass is removed.
                 session_config_payload["instructions"] = PROMPTS['paraphrase-gpt-realtime-enhanced']
-                logger.info("Configuring session for conversation mode with transcription and no turn detection.")
+                logger.info("Configuring session for conversation mode (single realtime model, no embedded ASR).")
 
             # Configure session
             await self.ws.send(json.dumps({
