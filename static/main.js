@@ -22,12 +22,11 @@ const recordButton = document.getElementById('recordButton');
 const replayButton = document.getElementById('replayButton');
 const storageStatus = document.getElementById('storageStatus');
 const transcript = document.getElementById('transcript');
-const enhancedTranscript = document.getElementById('enhancedTranscript');
+const notes = document.getElementById('notes');
 const copyButton = document.getElementById('copyButton');
-const copyEnhancedButton = document.getElementById('copyEnhancedButton');
-const readabilityButton = document.getElementById('readabilityButton');
-const askAIButton = document.getElementById('askAIButton');
-const correctnessButton = document.getElementById('correctnessButton');
+const copyNotesButton = document.getElementById('copyNotesButton');
+const addToNotesButton = document.getElementById('addToNotesButton');
+const clearNotesButton = document.getElementById('clearNotesButton');
 
 // Configuration
 const targetSeconds = 5;
@@ -551,8 +550,6 @@ async function startRecording() {
     
     try {
         transcript.value = '';
-        enhancedTranscript.value = '';
-
         // Check if stream is still valid, reinitialize ONLY if needed
         let streamActive = false;
         try {
@@ -706,9 +703,7 @@ async function replayLastRecording() {
         }
         
         // Clear transcript
-        transcript.value = '';
-        enhancedTranscript.value = '';
-        
+        transcript.value = '';        
         // Ensure WebSocket is connected
         if (!wsConnected || ws.readyState !== WebSocket.OPEN) {
             await new Promise((resolve) => {
@@ -799,7 +794,7 @@ function updateReplayButtonState() {
 recordButton.onclick = () => isRecording ? stopRecording() : startRecording();
 if (replayButton) replayButton.onclick = replayLastRecording;
 copyButton.onclick = () => copyToClipboard(transcript.value, copyButton);
-copyEnhancedButton.onclick = () => copyToClipboard(enhancedTranscript.value, copyEnhancedButton);
+copyNotesButton.onclick = () => copyToClipboard(notes.value, copyNotesButton);
 
 // Handle spacebar toggle
 document.addEventListener('keydown', (event) => {
@@ -818,114 +813,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeWebSocket();
     initializeTheme();
 });
-// Readability and AI handlers
-if (readabilityButton) readabilityButton.onclick = async () => {
-    startTimer();
-    const inputText = transcript.value.trim();
-    if (!inputText) {
-        alert('Please enter text to enhance readability.');
-        stopTimer();
-        return;
-    }
+// Notes: accumulate each transcript into one running note (persisted in
+// localStorage), then copy the whole thing out. This replaces the old
+// Readability / Correctness "Enhanced Output" feature — that one rewrote the
+// text too much and was barely used; this just stitches segments together.
+const NOTES_KEY = 'brainwave-notes';
+notes.value = localStorage.getItem(NOTES_KEY) || '';
+notes.addEventListener('input', () => localStorage.setItem(NOTES_KEY, notes.value));
 
-    try {
-        const response = await fetch('/api/v1/readability', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: inputText })
-        });
-
-        if (!response.ok) throw new Error('Readability enhancement failed');
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            fullText += decoder.decode(value, { stream: true });
-            enhancedTranscript.value = fullText;
-            enhancedTranscript.scrollTop = enhancedTranscript.scrollHeight;
-        }
-
-        if (!isMobileDevice()) copyToClipboard(fullText, copyEnhancedButton);
-        stopTimer();
-
-    } catch (error) {
-        console.error('Error:', error);
-        alert('Error enhancing readability');
-        stopTimer();
-    }
+if (addToNotesButton) addToNotesButton.onclick = () => {
+    const seg = transcript.value.trim();
+    if (!seg) return;
+    notes.value = notes.value.trim() ? (notes.value.replace(/\s+$/, '') + '\n\n' + seg) : seg;
+    localStorage.setItem(NOTES_KEY, notes.value);
+    notes.scrollTop = notes.scrollHeight;
+    showCopiedFeedback(addToNotesButton, '已加入');
 };
 
-if (askAIButton) askAIButton.onclick = async () => {
-    startTimer();
-    const inputText = transcript.value.trim();
-    if (!inputText) {
-        alert('Please enter text to ask AI about.');
-        stopTimer();
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/v1/ask_ai', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: inputText })
-        });
-
-        if (!response.ok) throw new Error('AI request failed');
-
-        const result = await response.json();
-        enhancedTranscript.value = result.answer;
-        if (!isMobileDevice()) copyToClipboard(result.answer, copyEnhancedButton);
-        stopTimer();
-
-    } catch (error) {
-        console.error('Error:', error);
-        alert('Error asking AI');
-        stopTimer();
-    }
-};
-
-if (correctnessButton) correctnessButton.onclick = async () => {
-    startTimer();
-    const inputText = transcript.value.trim();
-    if (!inputText) {
-        alert('Please enter text to check for correctness.');
-        stopTimer();
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/v1/correctness', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: inputText })
-        });
-
-        if (!response.ok) throw new Error('Correctness check failed');
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            fullText += decoder.decode(value, { stream: true });
-            enhancedTranscript.value = fullText;
-            enhancedTranscript.scrollTop = enhancedTranscript.scrollHeight;
-        }
-
-        if (!isMobileDevice()) copyToClipboard(fullText, copyEnhancedButton);
-        stopTimer();
-
-    } catch (error) {
-        console.error('Error:', error);
-        alert('Error checking correctness');
-        stopTimer();
+if (clearNotesButton) clearNotesButton.onclick = () => {
+    if (!notes.value || confirm('清空笔记？')) {
+        notes.value = '';
+        localStorage.setItem(NOTES_KEY, '');
     }
 };
 

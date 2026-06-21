@@ -50,21 +50,17 @@
             <button id="copyButton" class="copy-button">Copy</button>
         </div>
 
-        <!-- Post-processing actions -->
+        <!-- Notes controls: append the current transcript into the running note below -->
         <div class="button-container">
-            <button id="readabilityButton" class="action-button" title="Improve punctuation, grammar, and structure">
-                Readability
-            </button>
-            <button id="correctnessButton" class="action-button" title="Check for factual accuracy">
-                Correctness
-            </button>
+            <button id="addToNotesButton" class="action-button" title="把上面这段转录追加到下面的笔记">↓ 加入笔记</button>
+            <button id="clearNotesButton" class="action-button" title="清空下面的笔记">清空笔记</button>
         </div>
 
-        <!-- Enhanced output -->
+        <!-- Accumulating notes: each transcript gets appended here; copy the whole thing out at the end -->
         <div class="enhanced-transcript-container">
-            <div class="transcript-label">Enhanced Output</div>
-            <textarea id="enhancedTranscript" placeholder="Readability or Correctness results will appear here…"></textarea>
-            <button id="copyEnhancedButton" class="copy-button">Copy</button>
+            <div class="transcript-label">笔记 Notes</div>
+            <textarea id="notes" placeholder="点「加入笔记」把每段转录攒到这里，最后一次性复制带走。也可以直接在这里编辑。"></textarea>
+            <button id="copyNotesButton" class="copy-button">Copy</button>
         </div>
     </div>
 
