@@ -38,13 +38,36 @@ const isMobileDevice = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile
 
 async function copyToClipboard(text, button) {
     if (!text) return;
+    // Modern async Clipboard API first.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            showCopiedFeedback(button, 'Copied!');
+            return;
+        } catch (err) {
+            // fall through to the legacy path below
+        }
+    }
+    // Legacy fallback for webviews that don't support navigator.clipboard
+    // (WeChat in-app browser, Huawei HarmonyOS browser, etc.).
     try {
-        await navigator.clipboard.writeText(text);
-        showCopiedFeedback(button, 'Copied!');
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '0';
+        ta.style.left = '0';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { ta.setSelectionRange(0, text.length); } catch (e) {}
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        showCopiedFeedback(button, ok ? 'Copied!' : 'Copy failed');
     } catch (err) {
         console.error('Clipboard copy failed:', err);
-        // alert('Clipboard copy failed: ' + err.message);
-        // We don't show this message because it's not accurate. We could still write to the clipboard in this case.
     }
 }
 
