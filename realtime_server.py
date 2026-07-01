@@ -182,7 +182,10 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             openai_ready.clear()
             client = await create_realtime_client(model=model)
-            await client.connect(modalities=OPENAI_REALTIME_MODALITIES)
+            # Guard against a hung OpenAI handshake (flaky network / no session.created).
+            # Without this timeout the connect could stall forever, leaving the UI stuck on
+            # the yellow "connecting" dot until a manual page refresh.
+            await asyncio.wait_for(client.connect(modalities=OPENAI_REALTIME_MODALITIES), timeout=15)
             logger.info("Successfully connected to OpenAI client")
             
             # Register handlers after client is initialized
@@ -218,9 +221,21 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception as e:
             logger.error(f"Failed to connect to OpenAI client: {e}")
             openai_ready.clear()  # Ensure flag is cleared on failure
+            # Tear down the half-open client so the next attempt starts clean.
+            if client:
+                try:
+                    await client.close()
+                except Exception:
+                    pass
+                client = None
             await websocket.send_text(json.dumps({
                 "type": "error",
-                "content": "Failed to initialize OpenAI connection"
+                "content": "Failed to initialize OpenAI connection (timeout or handshake error). Click Start to retry."
+            }, ensure_ascii=False))
+            # Drop the UI back to idle (blue) so the user can just retry without refreshing.
+            await websocket.send_text(json.dumps({
+                "type": "status",
+                "status": "idle"
             }, ensure_ascii=False))
             return False
 

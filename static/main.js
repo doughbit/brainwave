@@ -9,6 +9,7 @@ let audioBuffer = new Int16Array(0);
 let wsConnected = false;
 let streamInitialized = false;
 let isAutoStarted = false;
+let connectingWatchdog = null;  // watchdog to auto-recover if stuck on "connecting"
 
 // IndexedDB state
 let db = null;
@@ -291,9 +292,23 @@ function cleanupAudioResources() {
 }
 
 // WebSocket handling
+// Recover from a connection stuck on "connecting": reset the recording UI and force the
+// WebSocket to reconnect (its onclose handler re-establishes it after ~1s) — instead of
+// the old "just refresh the page" workaround.
+function recoverStuckConnection() {
+    console.warn('Connection stuck on "connecting" — auto-recovering.');
+    isRecording = false;
+    isStopping = false;
+    if (recordButton) { recordButton.textContent = 'Start'; recordButton.classList.remove('recording'); }
+    stopTimer();
+    try { if (ws) ws.close(); } catch (e) {}
+}
+
 function updateConnectionStatus(status) {
     const statusDot = document.getElementById('connectionStatus');
     statusDot.classList.remove('connected', 'connecting', 'idle');
+    // Any status change clears the "stuck on connecting" watchdog (re-armed below if connecting).
+    if (connectingWatchdog) { clearTimeout(connectingWatchdog); connectingWatchdog = null; }
     
     switch (status) {
         case 'connected':  // OpenAI is connected and ready
@@ -303,6 +318,8 @@ function updateConnectionStatus(status) {
         case 'connecting':  // Establishing OpenAI connection
             statusDot.classList.add('connecting');
             statusDot.style.backgroundColor = '#FF9500';  // Orange
+            // Arm the watchdog: if we're still "connecting" 20s from now, auto-recover.
+            connectingWatchdog = setTimeout(recoverStuckConnection, 20000);
             break;
         case 'idle':  // Client connected, OpenAI not connected
             statusDot.classList.add('idle');
